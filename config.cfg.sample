@@ -6,3 +6,28 @@ ACCOUNT_NO = "계좌번호_앞8자리-뒤2자리_형태로_입력" # 예: "12345
 [telegram]
 TOKEN = "여기에_텔레그램_봇_토큰을_입력하세요"
 CHAT_ID = "여기에_텔레그램_챗_ID를_입력하세요"
+
+[strategy]
+# 종목 선정(Screening) 전략에 사용될 파라미터
+# 각 값은 정수(int) 또는 실수(float) 형태로 입력해야 합니다.
+
+# 골든크로스 전략
+short_ma_window = 5
+long_ma_window = 20
+
+# RSI 과매도 탈출 전략
+rsi_window = 14
+rsi_threshold = 30
+
+# 거래량 급증 확인 전략
+volume_window = 20
+volume_surge_multiplier = 2.0
+
+# 볼린저 밴드 돌파 전략
+bollinger_window = 20
+bollinger_std_dev = 2
+
+# MACD 골든크로스 전략
+macd_short_window = 12
+macd_long_window = 26
+macd_signal_window = 9
