@@ -1,0 +1,5 @@
+pykoreainvestment
+pandas
+python-telegram-bot
+configparser
+asyncio
