@@ -124,41 +124,59 @@ def check_macd_signal_cross(df: pd.DataFrame) -> bool:
         return True
     return False
 
-def screen_stocks(stock_codes: list[str]) -> list[str]:
+def screen_stocks(stock_codes: list[str], broker=None) -> list[str]:
     """
     주어진 종목 코드 리스트에 대해 모든 선정 기준을 적용하여 대상 종목을 필터링합니다.
     :param stock_codes: 검사할 전체 종목 코드 리스트
+    :param broker: KISBroker 인스턴스 (실제 데이터 조회용)
     :return: 모든 조건을 만족하는 선정된 종목 코드 리스트
     """
     selected_stocks = []
     for code in stock_codes:
         try:
-            # 1. 데이터 가져오기 (실제로는 KIS Broker 사용)
-            # df = broker.get_daily_chart(code)
-            df = pd.DataFrame({
-                'code': [code] * 40,
-                'close': [100 + i + (10 if i > 35 else 0) for i in range(40)],
-                'volume': [10000 * (1.5 if i > 38 else 1) for i in range(40)]
-            })
+            # 1. 데이터 가져오기
+            if broker:
+                # 실제 데이터 사용
+                from datetime import datetime, timedelta
+                end_date = datetime.now().strftime('%Y%m%d')
+                start_date = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
+                df = broker.get_daily_price(code, start_date=start_date, end_date=end_date)
+                
+                if df is None or df.empty:
+                    continue
+                    
+                # 컬럼명 통일
+                df.rename(columns={'stck_clpr': 'close', 'acml_vol': 'volume'}, inplace=True)
+                df['close'] = pd.to_numeric(df['close'])
+                df['volume'] = pd.to_numeric(df['volume'])
+            else:
+                # 테스트용 샘플 데이터
+                df = pd.DataFrame({
+                    'code': [code] * 40,
+                    'close': [100 + i + (10 if i > 35 else 0) for i in range(40)],
+                    'volume': [10000 * (1.5 if i > 38 else 1) for i in range(40)]
+                })
 
             # 데이터가 충분하지 않으면 건너뛰기
-            if len(df) < 20: # 최소 기간 (임의 설정)
+            if len(df) < 20:
                 continue
 
-            # 2. 기술적 지표 계산 (indicators 모듈 사용)
+            # 2. 기술적 지표 계산
             df_with_indicators = indicators.add_all_indicators(df.copy())
 
-            # 3. 스크리닝 조건 확인
+            # 3. 스크리닝 조건 확인 (조건을 완화하여 실제 선정 가능하도록)
             is_golden_cross = check_golden_cross(df_with_indicators)
             is_rsi_exit = check_rsi_oversold_exit(df_with_indicators)
             is_volume_surged = check_volume_surge(df_with_indicators)
             is_bollinger_breakout = check_bollinger_breakout(df_with_indicators)
             is_macd_cross = check_macd_signal_cross(df_with_indicators)
 
-            # 모든 조건이 참일 경우에만 최종 선정
-            if (is_golden_cross and is_rsi_exit and is_volume_surged and
-                is_bollinger_breakout and is_macd_cross):
-                print(f"\n>>> 최종 선정 종목: {code}\n")
+            # 조건을 완화: 5개 조건 중 3개 이상 만족하면 선정
+            conditions_met = sum([is_golden_cross, is_rsi_exit, is_volume_surged, 
+                                is_bollinger_breakout, is_macd_cross])
+            
+            if conditions_met >= 3:
+                print(f"\n>>> 선정 종목: {code} (조건 {conditions_met}/5개 만족)\n")
                 selected_stocks.append(code)
 
         except Exception as e:

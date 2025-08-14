@@ -75,6 +75,36 @@ def add_macd(df: pd.DataFrame) -> pd.DataFrame:
         df['signal'] = df['macd'].ewm(span=MACD_SIGNAL_WINDOW, adjust=False).mean()
     return df
 
+def add_ewo(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    데이터프레임에 EWO (Elder's Wave Oscillator) 지표를 추가합니다.
+    EWO = ((단기 EMA - 장기 EMA) / 장기 EMA) * 100
+    :param df: 주가 데이터프레임 ('close' 종가 필요)
+    :return: 'ewo' 컬럼이 추가된 데이터프레임
+    """
+    if len(df) >= LONG_MA_WINDOW:
+        short_ema = df['close'].ewm(span=SHORT_MA_WINDOW, adjust=False).mean()
+        long_ema = df['close'].ewm(span=LONG_MA_WINDOW, adjust=False).mean()
+        df['ewo'] = ((short_ema - long_ema) / long_ema) * 100
+    return df
+
+def check_missing_data(df: pd.DataFrame) -> tuple[bool, str]:
+    """
+    데이터프레임에서 누락된 데이터가 있는지 확인합니다.
+    :param df: 확인할 데이터프레임
+    :return: (누락 데이터 존재 여부, 누락 정보 메시지)
+    """
+    if df.empty:
+        return True, "데이터프레임이 비어있습니다."
+    
+    missing_count = df.isnull().sum().sum()
+    if missing_count > 0:
+        missing_info = df.isnull().sum()
+        missing_columns = missing_info[missing_info > 0].to_dict()
+        return True, f"누락된 데이터: {missing_columns}"
+    
+    return False, "누락된 데이터가 없습니다."
+
 def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     주어진 데이터프레임에 정의된 모든 기술적 지표를 추가합니다.
@@ -85,4 +115,5 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = add_rsi(df)
     df = add_bollinger_bands(df)
     df = add_macd(df)
+    df = add_ewo(df)
     return df

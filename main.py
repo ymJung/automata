@@ -10,8 +10,18 @@ from order_manager import OrderManager
 from stock_selector import screen_stocks
 
 # --- 설정 ---
-# 장이 열려있을 때 매매 로직을 실행하는 주기 (초)
-LOOP_INTERVAL_SECONDS = 10  # 5분
+import configparser
+
+# 설정 파일에서 매매 주기 읽기
+config = configparser.ConfigParser()
+config.read('config.cfg')
+
+try:
+    trading_control = config['trading_control']
+    LOOP_INTERVAL_MINUTES = trading_control.getint('loop_interval_minutes', 5)
+    LOOP_INTERVAL_SECONDS = LOOP_INTERVAL_MINUTES * 60  # 분을 초로 변환
+except KeyError:
+    LOOP_INTERVAL_SECONDS = 300  # 기본값 5분
 
 # 매수 후보 종목 리스트는 동적으로 조회
 CANDIDATE_STOCK_CODES = []
@@ -85,13 +95,31 @@ def run_trading_bot():
 
             # 4. 종목 스크리닝 (매 주기마다 실행하면 부하가 클 수 있으므로 필요시 주기 조정)
             print("\n--- 종목 스크리닝 실행 ---")
-            screened_stocks = screen_stocks(CANDIDATE_STOCK_CODES[:10], broker)  # 처음 10개 종목만 스크리닝
+            # 전체 후보 종목을 배치로 나누어 스크리닝
+            batch_size = 20  # 한 번에 처리할 종목 수
+            screened_stocks = []
+            
+            for i in range(0, min(len(CANDIDATE_STOCK_CODES), 60), batch_size):  # 최대 60개 종목까지
+                batch = CANDIDATE_STOCK_CODES[i:i+batch_size]
+                print(f"배치 {i//batch_size + 1}: {len(batch)}개 종목 스크리닝 중...")
+                batch_screened = screen_stocks(batch, broker)
+                screened_stocks.extend(batch_screened)
+                
+                # API 호출 제한을 위한 대기
+                if i + batch_size < len(CANDIDATE_STOCK_CODES):
+                    time.sleep(2)  # 2초 대기
+            
             print(f"스크리닝 결과: {len(screened_stocks)}개 종목 선정")
             
             # 5. 신규 종목 매수 신호 확인
             print("\n--- 신규 매수 대상 종목 확인 ---")
-            # 스크리닝된 종목 + 기존 후보 종목 중 일부를 확인
-            stocks_to_check = list(set(screened_stocks + CANDIDATE_STOCK_CODES[:5]))
+            # 스크리닝된 종목을 우선으로 하고, 없으면 상위 종목들 확인
+            if screened_stocks:
+                stocks_to_check = screened_stocks[:10]  # 스크리닝된 종목 중 최대 10개
+                print(f"스크리닝된 종목 우선 확인: {len(stocks_to_check)}개")
+            else:
+                stocks_to_check = CANDIDATE_STOCK_CODES[:10]  # 상위 10개 종목
+                print(f"스크리닝 결과가 없어 상위 종목 확인: {len(stocks_to_check)}개")
             
             for stock_code in stocks_to_check:
                 if stock_code in portfolio.holdings:
@@ -121,7 +149,7 @@ def run_trading_bot():
                     print(f"[{stock_code}] 매수 신호 없음.")
 
             # 6. 다음 주기까지 대기
-            print(f"\n[{datetime.now()}] 모든 작업 완료. {LOOP_INTERVAL_SECONDS}초 후 다음 주기를 시작합니다.")
+            print(f"\n[{datetime.now()}] 모든 작업 완료. {LOOP_INTERVAL_MINUTES}분 후 다음 주기를 시작합니다.")
             time.sleep(LOOP_INTERVAL_SECONDS)
 
     except MarketClosedError:
